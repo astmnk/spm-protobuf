@@ -20,9 +20,6 @@ jobs:
       - name: Checkout spm-protobuf
         uses: actions/checkout@v4
 
-      # Download the official objectivec release zip from GitHub releases.
-      # It extracts to protobuf-<version>/ which contains the objectivec/ subdirectory
-      # with the three platform-specific Xcode projects.
       - name: Download protobuf objectivec release
         run: |
           VERSION="${{ github.event.inputs.version }}"
@@ -32,8 +29,6 @@ jobs:
           unzip -q protobuf-objc.zip
           echo "OBJC_DIR=$PWD/protobuf-${VERSION}/objectivec" >> "$GITHUB_ENV"
 
-      # Gather public headers into a dedicated directory.
-      # Excludes *_PackagePrivate.h files which are internal implementation details.
       - name: Collect public headers
         run: |
           HEADERS="$RUNNER_TEMP/protobuf-headers"
@@ -48,10 +43,6 @@ jobs:
             -exec cp {} "$HEADERS/google/protobuf/" \;
 
           echo "HEADERS=$HEADERS" >> "$GITHUB_ENV"
-
-      # Each platform uses its own Xcode project.
-      # ONLY_ACTIVE_ARCH=NO ensures all supported architectures are compiled
-      # CONFIGURATION_BUILD_DIR pins the output so we can reliably find libProtocolBuffers.a.
 
       - name: Build — iOS device
         run: |
@@ -124,9 +115,6 @@ jobs:
             -library "$B/macos/$LIB"          -headers "$HEADERS" \
             -output "$RUNNER_TEMP/Protobuf.xcframework"
 
-      # Zip the xcframework — SPM requires a zip for remote binary targets.
-      # Then compute the SHA-256 checksum using the official SPM tool so the
-      # value is guaranteed to match what `swift package resolve` expects.
       - name: Zip and compute checksum
         run: |
           cd "$RUNNER_TEMP"
@@ -134,20 +122,16 @@ jobs:
           CHECKSUM=$(swift package compute-checksum Protobuf.xcframework.zip)
           echo "CHECKSUM=$CHECKSUM" >> "$GITHUB_ENV"
 
-      # Create the GitHub release and attach the zip as a release asset.
-      # The tag is created here; if it already exists the step will fail fast.
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           VERSION="${{ github.event.inputs.version }}"
-          gh release create "v${VERSION}" \
-            --title "Protobuf v${VERSION}" \
+          gh release create "${VERSION}" \
+            --title "Protobuf ${VERSION}" \
             --notes "Protobuf XCFramework built from [protocolbuffers/protobuf v${VERSION}](https://github.com/protocolbuffers/protobuf/releases/tag/v${VERSION})." \
             "$RUNNER_TEMP/Protobuf.xcframework.zip"
 
-      # Update only the two PackageMetadata values in Package.swift.
-      # Everything else (URL template, target definition) stays unchanged.
       - name: Update Package.swift
         run: |
           VERSION="${{ github.event.inputs.version }}"
@@ -163,5 +147,5 @@ jobs:
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
           git add Package.swift
-          git commit -m "Update Protobuf binary target to v${{ github.event.inputs.version }}"
+          git commit -m "Update Protobuf binary target to ${{ github.event.inputs.version }}"
           git push

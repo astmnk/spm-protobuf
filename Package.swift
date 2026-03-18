@@ -22,7 +22,7 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "Protobuf",
-            url: "https://github.com/astmnk/spm-protobuf/releases/download/v\(PackageMetadata.version)/Protobuf.xcframework.zip",
+            url: "https://github.com/astmnk/spm-protobuf/releases/download/\(PackageMetadata.version)/Protobuf.xcframework.zip",
             checksum: PackageMetadata.checksum)
     ]
 )
