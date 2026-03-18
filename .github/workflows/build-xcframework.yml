@@ -119,7 +119,7 @@ jobs:
         run: |
           cd "$RUNNER_TEMP"
           zip -r Protobuf.xcframework.zip Protobuf.xcframework
-          CHECKSUM=$(swift package --package-path "$GITHUB_WORKSPACE" compute-checksum Protobuf.xcframework.zip)
+          CHECKSUM=$(swift package compute-checksum "$RUNNER_TEMP/Protobuf.xcframework.zip")
           echo "CHECKSUM=$CHECKSUM" >> "$GITHUB_ENV"
 
       - name: Create GitHub release
