@@ -8,6 +8,10 @@ on:
         required: true
         type: string
 
+# Needed to create a release and push the Package.swift update.
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: macos-14
@@ -114,12 +118,46 @@ jobs:
             -library "$B/tvos-device/$LIB"    -headers "$HEADERS" \
             -library "$B/tvos-simulator/$LIB" -headers "$HEADERS" \
             -library "$B/macos/$LIB"          -headers "$HEADERS" \
-            -output "$GITHUB_WORKSPACE/Protobuf.xcframework"
+            -output "$RUNNER_TEMP/Protobuf.xcframework"
 
-      - name: Commit and push XCFramework
+      # Zip the xcframework — SPM requires a zip for remote binary targets.
+      # Then compute the SHA-256 checksum using the official SPM tool so the
+      # value is guaranteed to match what `swift package resolve` expects.
+      - name: Zip and compute checksum
+        run: |
+          cd "$RUNNER_TEMP"
+          zip -r Protobuf.xcframework.zip Protobuf.xcframework
+          CHECKSUM=$(swift package compute-checksum Protobuf.xcframework.zip)
+          echo "CHECKSUM=$CHECKSUM" >> "$GITHUB_ENV"
+
+      # Create the GitHub release and attach the zip as a release asset.
+      # The tag is created here; if it already exists the step will fail fast.
+      - name: Create GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          gh release create "v${VERSION}" \
+            --title "Protobuf v${VERSION}" \
+            --notes "Protobuf XCFramework built from [protocolbuffers/protobuf v${VERSION}](https://github.com/protocolbuffers/protobuf/releases/tag/v${VERSION})." \
+            "$RUNNER_TEMP/Protobuf.xcframework.zip"
+
+      # Update only the two PackageMetadata values in Package.swift.
+      # Everything else (URL template, target definition) stays unchanged.
+      - name: Update Package.swift
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          sed -i '' \
+            "s/static let version: String = \".*\"/static let version: String = \"${VERSION}\"/" \
+            Package.swift
+          sed -i '' \
+            "s/static let checksum: String = \".*\"/static let checksum: String = \"${CHECKSUM}\"/" \
+            Package.swift
+
+      - name: Commit and push Package.swift
         run: |
           git config user.name "github-actions[bot]"
           git config user.email "github-actions[bot]@users.noreply.github.com"
-          git add Protobuf.xcframework
-          git commit -m "Build Protobuf.xcframework v${{ github.event.inputs.version }}"
+          git add Package.swift
+          git commit -m "Update Protobuf binary target to v${{ github.event.inputs.version }}"
           git push

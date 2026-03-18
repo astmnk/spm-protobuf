@@ -1,7 +1,11 @@
 // swift-tools-version: 5.4
-// The swift-tools-version declares the minimum version of Swift required to build this package.
 
 import PackageDescription
+
+struct PackageMetadata {
+    static let version: String = "0.0.0"
+    static let checksum: String = "0000000000000000000000000000000000000000000000000000000000000000"
+}
 
 let package = Package(
     name: "spm-protobuf",
@@ -18,6 +22,7 @@ let package = Package(
     targets: [
         .binaryTarget(
             name: "Protobuf",
-            path: "Protobuf.xcframework")
+            url: "https://github.com/astmnk/spm-protobuf/releases/download/v\(PackageMetadata.version)/Protobuf.xcframework.zip",
+            checksum: PackageMetadata.checksum)
     ]
 )
