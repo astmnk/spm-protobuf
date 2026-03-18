@@ -1,0 +1,125 @@
+name: Build Protobuf XCFramework
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: "Protobuf version (e.g. 3.13.0 — without the leading v)"
+        required: true
+        type: string
+
+jobs:
+  build:
+    runs-on: macos-14
+
+    steps:
+      - name: Checkout spm-protobuf
+        uses: actions/checkout@v4
+
+      # Download the official objectivec release zip from GitHub releases.
+      # It extracts to protobuf-<version>/ which contains the objectivec/ subdirectory
+      # with the three platform-specific Xcode projects.
+      - name: Download protobuf objectivec release
+        run: |
+          VERSION="${{ github.event.inputs.version }}"
+          curl -L \
+            "https://github.com/protocolbuffers/protobuf/releases/download/v${VERSION}/protobuf-objectivec-${VERSION}.zip" \
+            -o protobuf-objc.zip
+          unzip -q protobuf-objc.zip
+          echo "OBJC_DIR=$PWD/protobuf-${VERSION}/objectivec" >> "$GITHUB_ENV"
+
+      # Gather public headers into a dedicated directory.
+      # Excludes *_PackagePrivate.h files which are internal implementation details.
+      - name: Collect public headers
+        run: |
+          HEADERS="$RUNNER_TEMP/protobuf-headers"
+          mkdir -p "$HEADERS/google/protobuf"
+
+          find "$OBJC_DIR" -maxdepth 1 -name "*.h" \
+            ! -name "*_PackagePrivate.h" \
+            -exec cp {} "$HEADERS/" \;
+
+          # Well-known type headers live in objectivec/google/protobuf/
+          find "$OBJC_DIR/google/protobuf" -maxdepth 1 -name "*.h" \
+            -exec cp {} "$HEADERS/google/protobuf/" \;
+
+          echo "HEADERS=$HEADERS" >> "$GITHUB_ENV"
+
+      # Each platform uses its own Xcode project.
+      # ONLY_ACTIVE_ARCH=NO ensures all supported architectures are compiled
+      # (e.g. arm64 + x86_64 for the simulator slice).
+      # CONFIGURATION_BUILD_DIR pins the output so we can reliably find libProtocolBuffers.a.
+
+      - name: Build — iOS device
+        run: |
+          xcodebuild build \
+            -project "$OBJC_DIR/ProtocolBuffers_iOS.xcodeproj" \
+            -scheme ProtocolBuffers \
+            -configuration Release \
+            -sdk iphoneos \
+            ONLY_ACTIVE_ARCH=NO \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/ios-device"
+
+      - name: Build — iOS Simulator
+        run: |
+          xcodebuild build \
+            -project "$OBJC_DIR/ProtocolBuffers_iOS.xcodeproj" \
+            -scheme ProtocolBuffers \
+            -configuration Release \
+            -sdk iphonesimulator \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64 x86_64" \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/ios-simulator"
+
+      - name: Build — tvOS device
+        run: |
+          xcodebuild build \
+            -project "$OBJC_DIR/ProtocolBuffers_tvOS.xcodeproj" \
+            -scheme ProtocolBuffers \
+            -configuration Release \
+            -sdk appletvos \
+            ONLY_ACTIVE_ARCH=NO \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/tvos-device"
+
+      - name: Build — tvOS Simulator
+        run: |
+          xcodebuild build \
+            -project "$OBJC_DIR/ProtocolBuffers_tvOS.xcodeproj" \
+            -scheme ProtocolBuffers \
+            -configuration Release \
+            -sdk appletvsimulator \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64 x86_64" \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/tvos-simulator"
+
+      - name: Build — macOS
+        run: |
+          xcodebuild build \
+            -project "$OBJC_DIR/ProtocolBuffers_OSX.xcodeproj" \
+            -scheme ProtocolBuffers \
+            -configuration Release \
+            -sdk macosx \
+            ONLY_ACTIVE_ARCH=NO \
+            ARCHS="arm64 x86_64" \
+            CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/macos"
+
+      - name: Create XCFramework
+        run: |
+          B="$RUNNER_TEMP/build"
+          LIB="libProtocolBuffers.a"
+
+          xcodebuild -create-xcframework \
+            -library "$B/ios-device/$LIB"     -headers "$HEADERS" \
+            -library "$B/ios-simulator/$LIB"  -headers "$HEADERS" \
+            -library "$B/tvos-device/$LIB"    -headers "$HEADERS" \
+            -library "$B/tvos-simulator/$LIB" -headers "$HEADERS" \
+            -library "$B/macos/$LIB"          -headers "$HEADERS" \
+            -output "$GITHUB_WORKSPACE/Protobuf.xcframework"
+
+      - name: Commit and push XCFramework
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git add Protobuf.xcframework
+          git commit -m "Build Protobuf.xcframework v${{ github.event.inputs.version }}"
+          git push
