@@ -51,60 +51,64 @@ jobs:
 
       # Each platform uses its own Xcode project.
       # ONLY_ACTIVE_ARCH=NO ensures all supported architectures are compiled
-      # (e.g. arm64 + x86_64 for the simulator slice).
       # CONFIGURATION_BUILD_DIR pins the output so we can reliably find libProtocolBuffers.a.
 
       - name: Build — iOS device
         run: |
           xcodebuild build \
             -project "$OBJC_DIR/ProtocolBuffers_iOS.xcodeproj" \
-            -scheme ProtocolBuffers \
+            -target ProtocolBuffers \
             -configuration Release \
             -sdk iphoneos \
             ONLY_ACTIVE_ARCH=NO \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/ios-device"
 
       - name: Build — iOS Simulator
         run: |
           xcodebuild build \
             -project "$OBJC_DIR/ProtocolBuffers_iOS.xcodeproj" \
-            -scheme ProtocolBuffers \
+            -target ProtocolBuffers \
             -configuration Release \
             -sdk iphonesimulator \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS="arm64 x86_64" \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/ios-simulator"
 
       - name: Build — tvOS device
         run: |
           xcodebuild build \
             -project "$OBJC_DIR/ProtocolBuffers_tvOS.xcodeproj" \
-            -scheme ProtocolBuffers \
+            -target ProtocolBuffers \
             -configuration Release \
             -sdk appletvos \
             ONLY_ACTIVE_ARCH=NO \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/tvos-device"
 
       - name: Build — tvOS Simulator
         run: |
           xcodebuild build \
             -project "$OBJC_DIR/ProtocolBuffers_tvOS.xcodeproj" \
-            -scheme ProtocolBuffers \
+            -target ProtocolBuffers \
             -configuration Release \
             -sdk appletvsimulator \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS="arm64 x86_64" \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/tvos-simulator"
 
       - name: Build — macOS
         run: |
           xcodebuild build \
             -project "$OBJC_DIR/ProtocolBuffers_OSX.xcodeproj" \
-            -scheme ProtocolBuffers \
+            -target ProtocolBuffers \
             -configuration Release \
             -sdk macosx \
             ONLY_ACTIVE_ARCH=NO \
             ARCHS="arm64 x86_64" \
+            GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/macos"
 
       - name: Create XCFramework
