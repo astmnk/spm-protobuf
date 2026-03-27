@@ -102,7 +102,7 @@ jobs:
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/macos"
 
-      - name: Wrap static libraries into framework bundles
+      - name: Wrap static libraries into dynamic framework bundles
         run: |
           B="$RUNNER_TEMP/build"
           VERSION="${{ github.event.inputs.version }}"
@@ -111,8 +111,51 @@ jobs:
             FW="$B/$SLICE/Protobuf.framework"
             mkdir -p "$FW/Headers/google/protobuf"
 
-            # Static lib becomes the framework binary (renamed, no .a extension)
-            cp "$B/$SLICE/libProtocolBuffers.a" "$FW/Protobuf"
+            # Determine the SDK, architectures, and minimum deployment target
+            # for each platform slice.
+            case "$SLICE" in
+              ios-device)
+                SDK=iphoneos
+                ARCHS_FLAGS="-arch arm64"
+                PLATFORM_FLAGS="-miphoneos-version-min=10.0"
+                ;;
+              ios-simulator)
+                SDK=iphonesimulator
+                ARCHS_FLAGS="-arch arm64 -arch x86_64"
+                PLATFORM_FLAGS="-mios-simulator-version-min=10.0"
+                ;;
+              tvos-device)
+                SDK=appletvos
+                ARCHS_FLAGS="-arch arm64"
+                PLATFORM_FLAGS="-mtvos-version-min=10.0"
+                ;;
+              tvos-simulator)
+                SDK=appletvsimulator
+                ARCHS_FLAGS="-arch arm64 -arch x86_64"
+                PLATFORM_FLAGS="-mtvos-simulator-version-min=10.0"
+                ;;
+              macos)
+                SDK=macosx
+                ARCHS_FLAGS="-arch arm64 -arch x86_64"
+                PLATFORM_FLAGS="-mmacosx-version-min=10.10"
+                ;;
+            esac
+
+            SDK_PATH=$(xcrun --sdk "$SDK" --show-sdk-path)
+
+            # Re-link the static archive into a dynamic library.
+            # -force_load ensures every ObjC class and category is included
+            # (equivalent to -ObjC but operates per-archive, which is safer).
+            clang -dynamiclib \
+              $ARCHS_FLAGS \
+              $PLATFORM_FLAGS \
+              -isysroot "$SDK_PATH" \
+              -install_name @rpath/Protobuf.framework/Protobuf \
+              -compatibility_version 1.0 \
+              -current_version "${VERSION}" \
+              -force_load "$B/$SLICE/libProtocolBuffers.a" \
+              -framework Foundation \
+              -o "$FW/Protobuf"
 
             # Copy public headers into the framework bundle
             cp "$HEADERS/"*.h                 "$FW/Headers/"
