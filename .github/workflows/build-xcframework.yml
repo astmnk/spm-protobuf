@@ -102,17 +102,47 @@ jobs:
             GCC_TREAT_WARNINGS_AS_ERRORS=NO \
             CONFIGURATION_BUILD_DIR="$RUNNER_TEMP/build/macos"
 
+      - name: Wrap static libraries into framework bundles
+        run: |
+          B="$RUNNER_TEMP/build"
+          VERSION="${{ github.event.inputs.version }}"
+
+          for SLICE in ios-device ios-simulator tvos-device tvos-simulator macos; do
+            FW="$B/$SLICE/Protobuf.framework"
+            mkdir -p "$FW/Headers/google/protobuf"
+
+            # Static lib becomes the framework binary (renamed, no .a extension)
+            cp "$B/$SLICE/libProtocolBuffers.a" "$FW/Protobuf"
+
+            # Copy public headers into the framework bundle
+            cp "$HEADERS/"*.h                 "$FW/Headers/"
+            cp "$HEADERS/google/protobuf/"*.h "$FW/Headers/google/protobuf/"
+
+            # Minimal Info.plist required by Xcode for a framework bundle.
+            # PlistBuddy creates the file if it does not already exist.
+            /usr/libexec/PlistBuddy \
+              -c "Add :CFBundleExecutable         string Protobuf" \
+              -c "Add :CFBundleIdentifier         string com.google.protobuf" \
+              -c "Add :CFBundleName               string Protobuf" \
+              -c "Add :CFBundlePackageType        string FMWK" \
+              -c "Add :CFBundleShortVersionString string ${VERSION}" \
+              -c "Add :CFBundleVersion            string ${VERSION}" \
+              "$FW/Info.plist"
+          done
+
       - name: Create XCFramework
         run: |
           B="$RUNNER_TEMP/build"
-          LIB="libProtocolBuffers.a"
 
+          # Use -framework (not -library) so each XCFramework slice contains
+          # Protobuf.framework/Protobuf — the structure Xcode expects for a
+          # SwiftPM .binaryTarget.
           xcodebuild -create-xcframework \
-            -library "$B/ios-device/$LIB"     -headers "$HEADERS" \
-            -library "$B/ios-simulator/$LIB"  -headers "$HEADERS" \
-            -library "$B/tvos-device/$LIB"    -headers "$HEADERS" \
-            -library "$B/tvos-simulator/$LIB" -headers "$HEADERS" \
-            -library "$B/macos/$LIB"          -headers "$HEADERS" \
+            -framework "$B/ios-device/Protobuf.framework"     \
+            -framework "$B/ios-simulator/Protobuf.framework"  \
+            -framework "$B/tvos-device/Protobuf.framework"    \
+            -framework "$B/tvos-simulator/Protobuf.framework" \
+            -framework "$B/macos/Protobuf.framework"          \
             -output "$RUNNER_TEMP/Protobuf.xcframework"
 
       - name: Zip and compute checksum
